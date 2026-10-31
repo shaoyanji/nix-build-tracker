@@ -68,20 +68,26 @@ curl -s "$(aws lambda get-function-url-config --function-name nix-build-tracker-
 
 ## What it costs
 
-Measured on 2026-10-30, eight days into its life: **$0.00** — Lambda, DynamoDB,
-Cognito, CloudFront and S3 all reported zero (`aws ce get-cost-and-usage`).
+Steady state is **$0.00**. Everything here is on a perpetual allowance, not a
+12-month trial: Lambda 1M requests + 400K GB-seconds, DynamoDB 25 RCU/25 WCU/25 GB,
+CloudFront 1 TB + 10M requests, Cognito thousands of MAU, and Function URLs at no
+charge. Two AWS budgets are free, and both slots are used.
 
-Everything here is on a perpetual allowance, not a 12-month trial: Lambda 1M
-requests + 400K GB-seconds, DynamoDB 25 RCU/25 WCU/25 GB, CloudFront 1 TB + 10M
-requests, Cognito thousands of MAU, and Function URLs at no charge. Two AWS budgets
-are free, and both slots are now used.
+The measured $0.02 on 2026-10-31 was **the measurement, not the app**. The Cost
+Explorer API bills **$0.01 per request**, and the October total was exactly two
+requests (`aws ce get-cost-and-usage`, the call this section used to recommend).
+The service split named it: `AWS Cost Explorer $0.02`, with S3 at $0.00009 and the
+rest at zero. So:
 
-Two lines can drift, neither meaningfully:
-
-- **S3 storage** is a 12-month allowance this legacy account no longer has. The page
-  is ~12 KB, which is $0.023/GB-month — around four ten-thousandths of a cent a year.
-- **CloudWatch Logs** retains forever unless a retention period is set. Volume from a
-  128 MB function is trivial, but it is worth capping if the app ever gets noisy.
+- **Do not run `aws ce get-cost-and-usage` to prove the app is free.** Each call
+  costs a cent and makes the next reading wrong. Use the console, or the free
+  Budgets API: `aws budgets describe-budgets --account-id <id>` returns the
+  actual and forecast spend, and `nix-build-tracker-zero-spend` is the tripwire.
+- **CloudWatch Logs** used to retain forever; `deploy.sh` now creates
+  `/aws/lambda/nix-build-tracker-api` and pins retention to 7 days
+  (`LOG_RETENTION`), so nothing accumulates indefinitely.
+- **S3 storage** is the only line on a 12-month allowance this legacy account no
+  longer has. The page is ~12 KB at $0.023/GB-month — ten-thousandths of a cent.
 
 The free-tier limits are account-wide, so a second table or Lambda spends from the
 same allowance.

@@ -19,6 +19,7 @@ ROLE_NAME=${APP_NAME}-lambda
 POOL_NAME=${APP_NAME}-users
 CLIENT_NAME=${APP_NAME}-web
 RESERVED_CONCURRENCY=${RESERVED_CONCURRENCY:-5}
+LOG_RETENTION=${LOG_RETENTION:-7}
 ALERT_EMAIL=${ALERT_EMAIL:-}
 
 PROJECT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -225,6 +226,14 @@ fi
 aws lambda wait function-updated --function-name "$LAMBDA_NAME" 2>/dev/null || true
 aws lambda wait function-active --function-name "$LAMBDA_NAME"
 
+# Lambda creates the log group lazily and never expires it, so it is the one
+# line that can grow forever. Retention is free; creating the group up front
+# makes the policy apply before the first invocation instead of after it.
+log "cloudwatch log group /aws/lambda/$LAMBDA_NAME (retain ${LOG_RETENTION}d)"
+aws logs create-log-group --log-group-name "/aws/lambda/$LAMBDA_NAME" 2>/dev/null || true
+aws logs put-retention-policy --log-group-name "/aws/lambda/$LAMBDA_NAME" --retention-in-days "$LOG_RETENTION" >/dev/null
+ok "log retention ${LOG_RETENTION} days"
+
 # Reserved concurrency is the runaway-loop guard. AWS only accepts it when the
 # account keeps >= 10 unreserved executions, so a restricted account (ceiling 10)
 # cannot reserve any at all — report that instead of hiding it.
@@ -417,6 +426,11 @@ budget=$(aws budgets describe-budgets --account-id "$ACCOUNT_ID" \
 	--query "Budgets[?BudgetName=='$BUDGET_NAME'].[BudgetName, BudgetLimit.Amount] | [0]" --output text)
 [ -n "$budget" ] || die "budget $BUDGET_NAME not found"
 ok "budget $budget USD"
+
+DEFAULT_RETENTION=$(aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/$LAMBDA_NAME" \
+	--query "logGroups[?logGroupName=='/aws/lambda/$LAMBDA_NAME'].retentionInDays | [0]" --output text)
+[ "$DEFAULT_RETENTION" = "$LOG_RETENTION" ] || die "log retention is ${DEFAULT_RETENTION/None/unset}, expected $LOG_RETENTION"
+ok "log retention ${LOG_RETENTION} days (nothing accumulates indefinitely)"
 
 curl -fsS --max-time 15 "$FUNCTION_URL" >/dev/null || die "function URL did not answer a health check"
 ok "function URL answers unauthenticated GET / (health)"
