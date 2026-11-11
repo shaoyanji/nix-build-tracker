@@ -1,5 +1,7 @@
 # NixOS Build Tracker
 
+![nix-build-tracker: hashes in a ledger, each synced to a cloud node](https://res.cloudinary.com/de1eajx01/image/upload/f_auto,q_auto,w_1200/assets/repos/nix-build-tracker)
+
 A private record of the NixOS configuration hashes and Git commits you want to be
 able to check on later — "did this exact build still reproduce?" — kept entirely on
 AWS services that stay free, so it can sit idle for months without billing.
